@@ -48,6 +48,6 @@ import (
 
 	// generate all main.tf.json for terraform
 	"tf-gen-all": cup.RunPrint & {
-		runP: exec.Run & {cmd: ["sh", "-c", "find . -type d -not -path '*/.terraform*' -mindepth 1 | xargs -I {} sh -c 'cd {} && cue cmd tf-gen'"]}
+		runP: exec.Run & {cmd: ["sh", "-euc", "find . -type d -not -path '*/.terraform*' -mindepth 1 | xargs -I {} sh -euc 'cd {} && cue cmd tf-gen'"]}
 	}
 }
