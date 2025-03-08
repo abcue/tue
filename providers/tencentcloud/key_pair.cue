@@ -1,4 +1,4 @@
-package product
+package tencentcloud
 
 key_pair: {
 	#var: {
@@ -11,7 +11,7 @@ key_pair: {
 	let N = #var.name
 
 	resource: tencentcloud_key_pair: (N): #var.key_pair & {
-		key_name:   N
-		public_key: string
+		key_name:    N
+		public_key?: string
 	}
 }

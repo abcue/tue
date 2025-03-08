@@ -1,4 +1,4 @@
-package product
+package tencentcloud
 
 import "strings"
 
@@ -12,8 +12,8 @@ cvm: {
 		}
 		instance: {
 			req: {
-				cpu:    int
-				memory: int
+				cpu:    *1 | int
+				memory: *2 | int
 			}
 			args: {
 				availability_zone: #var.args.availability_zone

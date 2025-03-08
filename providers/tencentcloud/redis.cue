@@ -1,4 +1,4 @@
-package product
+package tencentcloud
 
 redis: {
 	#var: {

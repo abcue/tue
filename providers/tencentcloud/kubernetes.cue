@@ -1,7 +1,8 @@
-package product
+package tencentcloud
 
 kubernetes: {
 	let N = #var.name
+	let TN = "tke-" + N
 
 	#var: {
 		name: string
@@ -59,21 +60,21 @@ kubernetes: {
 		}
 	}
 
-	resource: tencentcloud_key_pair: (N): {
-		key_name: N
+	resource: tencentcloud_key_pair: (TN): {
+		key_name: TN
 	}
 
 	data: tencentcloud_vpc_instances: vpc: {
 		vpc_id: "${local.vpc_id}"
 	}
 
-	resource: tencentcloud_security_group: (N): {
-		name: "tke-" + N
+	resource: tencentcloud_security_group: (TN): {
+		name: TN
 	}
 
 	// https://cloud.tencent.com/document/product/457/9084
-	resource: tencentcloud_security_group_rule_set: (N): {
-		security_group_id: "${tencentcloud_security_group.\(N).id}"
+	resource: tencentcloud_security_group_rule_set: (TN): {
+		security_group_id: "${tencentcloud_security_group.\(TN).id}"
 		ingress: [{
 			action:     "ACCEPT"
 			cidr_block: "${data.tencentcloud_vpc_instances.vpc.instance_list[0].cidr_block}"
@@ -109,6 +110,7 @@ kubernetes: {
 	}
 
 	let NE = N + "-extranet"
+	let TNE = "tke-" + NE
 
 	resource: tencentcloud_kubernetes_cluster_endpoint: (NE): {
 		cluster_id:                      "${local.cluster_id}"
@@ -116,20 +118,14 @@ kubernetes: {
 		cluster_internet_security_group: "${tencentcloud_security_group.\(NE).id}"
 	}
 
-	resource: tencentcloud_security_group: (NE): {
-		name: "tke-" + NE
+	resource: tencentcloud_security_group: (TNE): {
+		name: TNE
 	}
 
 	// https://cloud.tencent.com/document/product/457/9084
-	resource: tencentcloud_security_group_rule_set: (NE): {
-		security_group_id: "${tencentcloud_security_group.\(NE).id}"
-		ingress: [{
-			action: "ACCEPT"
-			// TODO(yujunz): Replace with the NV CorpNet
-			cidr_block: *"203.18.50.4/32" | _
-			port:       "443"
-			protocol:   "TCP"
-		}]
+	resource: tencentcloud_security_group_rule_set: (TNE): {
+		security_group_id: "${tencentcloud_security_group.\(TNE).id}"
+		ingress: []
 		egress: [{
 			action:     "ACCEPT"
 			cidr_block: "0.0.0.0/0"
