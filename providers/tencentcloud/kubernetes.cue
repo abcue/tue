@@ -1,25 +1,31 @@
 package tencentcloud
 
+import "regexp"
+
 kubernetes: {
 	let N = #var.name
 	let TN = "tke-" + N
 
 	#var: {
-		name: string
+		name:    string
+		product: *"kubernetes" | _
 		args: {
 			vpc_name:    string
 			subnet_name: string
+		}
+		kubernetes: {
+			cluster: {...}
+			node_pool: [NAME=_]: {...}
 		}
 	}
 
 	_local: cluster_id: "${tencentcloud_kubernetes_cluster.\(N).id}"
 
-	resource: tencentcloud_kubernetes_cluster: (N): {
-		cluster_name:     N
-		vpc_id:           "${local.vpc_id}"
-		cluster_cidr:     *"172.18.0.0/16" | _
-		cluster_version:  *"1.30.0" | _
-		cluster_internet: true
+	resource: tencentcloud_kubernetes_cluster: (N): #var.kubernetes.cluster & {
+		cluster_name:    N
+		vpc_id:          "${local.vpc_id}"
+		cluster_cidr:    *"172.18.0.0/16" | _
+		cluster_version: *"1.30.0" | _
 		// Default option in provider is `docker`, but it is not supported for cluster_version >=1.24
 		// kubelet[161614]: E0226 14:34:51.595065  161614 run.go:74] "command failed" err="failed to run Kubelet: validate service connection: validate CRI v1 runtime API for endpoint \"unix:///run/cri-dockerd.sock\": rpc error: code = Unimplemented desc = unknown service runtime.v1.RuntimeService"
 		container_runtime: "containerd"
@@ -27,17 +33,21 @@ kubernetes: {
 			auto_create_discovery_anonymous_auth: true
 			use_tke_default:                      true
 		}
+		// Managed by tencentcloud_kubernetes_cluster_endpoint
+		lifecycle: ignore_changes: [
+			"cluster_internet",
+		]
 	}
 
-	resource: tencentcloud_kubernetes_native_node_pool: (N): {
+	resource: tencentcloud_kubernetes_native_node_pool?: (N)?: {
 		name:       N
 		type:       "Native"
 		cluster_id: _local.cluster_id
 		native: {
 			instance_types: ["SA3.MEDIUM2"]
 			instance_charge_type: "POSTPAID_BY_HOUR"
-			key_ids: ["${tencentcloud_key_pair.\(N).id}"]
-			security_group_ids: ["${tencentcloud_security_group.\(N).id}"]
+			key_ids: ["${tencentcloud_key_pair.\(TN).id}"]
+			security_group_ids: ["${tencentcloud_security_group.\(TN).id}"]
 			subnet_ids: ["${local.subnet_id}"]
 			system_disk: {
 				disk_type: "CLOUD_SSD"
@@ -46,22 +56,25 @@ kubernetes: {
 		}
 	}
 
-	resource: tencentcloud_kubernetes_node_pool: (N): {
-		name:       N
-		cluster_id: _local.cluster_id
-		vpc_id:     "${local.vpc_id}"
-		subnet_ids: ["${local.subnet_id}"]
-		min_size: 0
-		max_size: 3
-		auto_scaling_config: {
-			instance_type: "SA3.MEDIUM2"
-			key_ids: ["${tencentcloud_key_pair.\(N).id}"]
-			orderly_security_group_ids: ["${tencentcloud_security_group.\(N).id}"]
+	for n, np in #var.kubernetes.node_pool {
+		resource: tencentcloud_kubernetes_node_pool: ("\(N)_\(n)"): np & {
+			name:       n
+			cluster_id: _local.cluster_id
+			vpc_id:     "${local.vpc_id}"
+			subnet_ids: ["${local.subnet_id}"]
+			min_size: 0
+			max_size: 3
+			auto_scaling_config: {
+				instance_type: *"SA3.MEDIUM2" | _
+				key_ids: ["${tencentcloud_key_pair.\(TN).id}"]
+				orderly_security_group_ids: ["${tencentcloud_security_group.\(TN).id}"]
+			}
 		}
 	}
 
 	resource: tencentcloud_key_pair: (TN): {
-		key_name: TN
+		// │ Error: key_name only support letters, numbers and "_": tke-avinf
+		key_name: regexp.ReplaceAll("[^a-zA-Z0-9_]", TN, "_")
 	}
 
 	data: tencentcloud_vpc_instances: vpc: {
@@ -113,9 +126,9 @@ kubernetes: {
 	let TNE = "tke-" + NE
 
 	resource: tencentcloud_kubernetes_cluster_endpoint: (NE): {
-		cluster_id:                      "${local.cluster_id}"
+		cluster_id:                      _local.cluster_id
 		cluster_internet:                true
-		cluster_internet_security_group: "${tencentcloud_security_group.\(NE).id}"
+		cluster_internet_security_group: "${tencentcloud_security_group.\(TNE).id}"
 	}
 
 	resource: tencentcloud_security_group: (TNE): {

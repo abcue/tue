@@ -12,6 +12,13 @@ vpc: {
 		// subnets -> name -> cidr -> availability zone
 		subnets: [NAME=string]: [net.IPCIDR]: string
 		nat_gateway_enabled: bool | *false
+
+		address: {
+			// https://registry.terraform.io/providers/tencentcloudstack/tencentcloud/latest/docs/resources/address_template
+			template: [NAME=string]: _
+			// https://registry.terraform.io/providers/tencentcloudstack/tencentcloud/latest/docs/resources/address_template_group
+			template_group: [NAME=string]: _
+		}
 	}
 
 	let N = #var.name
@@ -66,6 +73,19 @@ vpc: {
 			destination_cidr_block: "0.0.0.0/0"
 			next_type:              "NAT"
 			next_hub:               "${tencentcloud_nat_gateway.\(N)_nat_gateway.id}"
+		}
+	}
+
+	for n, t in #var.address.template {
+		resource: tencentcloud_address_template: (n): t & {
+			name: n
+		}
+		resource: tencentcloud_private_dns_record: "\(n)_ipm": {
+			zone_id:      "${local.zone_id}"
+			sub_domain:   "\(n).ipm"
+			ttl:          300
+			record_type:  "TXT"
+			record_value: "${tencentcloud_address_template.\(n).id}"
 		}
 	}
 }
