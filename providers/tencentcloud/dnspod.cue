@@ -7,31 +7,38 @@ import (
 )
 
 dnspod: {
-	#var: {
-		dnspod: {
-			domain: *"" | string
-			sub_domains: *[] | [...string]
-			// a creates a record resolving to IPv4 addresses
-			// a: [record]: =ipv4 | [...ipv4]
-			// e.g.
-			// a: {
-			// 	maglev: "100.65.0.4"
-			//  swiftstack: ["100.65.0.2", "100.65.0.3"]
-			// }
-			record: {
-				a: *{} | {[string]: string | [...string]}
-				cname: {
-					// "maglev.cn.nvda.ai": "cache.maglev": _
-					// cache.maglev.cn.nvda.ai CNAME maglev.cn.nvda.ai
-					[record_value=string]: [sub_domain=string]: _
-				}
-				srv: *{} | {[string]: string}
+	#tencentcloud: dnspod: {
+		domain: string
+		sub_domains: *[] | [...string]
+		// a creates a record resolving to IPv4 addresses
+		// a: [record]: =ipv4 | [...ipv4]
+		// e.g.
+		// a: {
+		// 	subdomain1: "100.65.0.4"
+		// 	subdomain2: ["100.65.0.2", "100.65.0.3"]
+		// }
+		record: {
+			a: *{} | {[string]: string | [...string]}
+			cname: [record_value=string]: [sub_domain=string]: _
+			srv: *{} | {[string]: string}
+		}
+	}
+
+	let R = "[^0-9a-zA-Z_\\-]"
+	let D = #tencentcloud.dnspod.domain
+	let DN = regexp.ReplaceAllLiteral(R, D, "_")
+
+	resource: tencentcloud_dnspod_domain_instance?: (DN)?: domain: D
+	_local: import: {
+		if resource.tencentcloud_dnspod_domain_instance[DN] != _|_ {
+			(D): {
+				id: D
+				to: "tencentcloud_dnspod_domain_instance.\(DN)"
 			}
 		}
 	}
-	_local: rsc_replace: "[^0-9a-zA-Z_\\-]"
-	let D = #var.dnspod.domain
-	for type, records in #var.dnspod.record {
+
+	for type, records in #tencentcloud.dnspod.record {
 		for record, value in records for v in list.FlattenN([value], -1) {
 			let R = regexp.ReplaceAllLiteral(_local.rsc_replace, strings.Join([D, record, type], "_"), "_")
 			resource: tencentcloud_dnspod_record: (R): {
@@ -42,10 +49,9 @@ dnspod: {
 			}
 		}
 	}
-	_local: import: {}
-	for sd in #var.dnspod.sub_domains {
+	for sd in #tencentcloud.dnspod.sub_domains {
 		let SD = "\(sd).\(D)"
-		let SDN = regexp.ReplaceAllLiteral(_local.rsc_replace, SD, "_")
+		let SDN = regexp.ReplaceAllLiteral(R, SD, "_")
 
 		// // Easier to validate interactively in console then import
 		// resource: tencentcloud_subdomain_validate_txt_value_operation: (SDN): domain_zone: SD

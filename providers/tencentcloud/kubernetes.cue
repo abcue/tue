@@ -4,7 +4,6 @@ import "regexp"
 
 kubernetes: {
 	let N = #var.name
-	let TN = "tke-" + N
 
 	#var: {
 		name:    string
@@ -13,15 +12,17 @@ kubernetes: {
 			vpc_name:    string
 			subnet_name: string
 		}
-		kubernetes: {
-			cluster: {...}
-			node_pool: [NAME=_]: {...}
-		}
+	}
+
+	#tencentcloud: kubernetes: {
+		cluster: args: {...}
+		node_pool: [NAME=_]: args: {...}
+		cluster_endpoint: args: {...}
 	}
 
 	_local: cluster_id: "${tencentcloud_kubernetes_cluster.\(N).id}"
 
-	resource: tencentcloud_kubernetes_cluster: (N): #var.kubernetes.cluster & {
+	resource: tencentcloud_kubernetes_cluster: (N): #tencentcloud.kubernetes.cluster.args & {
 		cluster_name:    N
 		vpc_id:          "${local.vpc_id}"
 		cluster_cidr:    *"172.18.0.0/16" | _
@@ -35,46 +36,34 @@ kubernetes: {
 		}
 		// Managed by tencentcloud_kubernetes_cluster_endpoint
 		lifecycle: ignore_changes: [
+			"cluster_intranet",
+			"cluster_intranet_domain",
 			"cluster_internet",
 		]
 	}
 
-	resource: tencentcloud_kubernetes_native_node_pool?: (N)?: {
-		name:       N
-		type:       "Native"
-		cluster_id: _local.cluster_id
-		native: {
-			instance_types: ["SA3.MEDIUM2"]
-			instance_charge_type: "POSTPAID_BY_HOUR"
-			key_ids: ["${tencentcloud_key_pair.\(TN).id}"]
-			security_group_ids: ["${tencentcloud_security_group.\(TN).id}"]
-			subnet_ids: ["${local.subnet_id}"]
-			system_disk: {
-				disk_type: "CLOUD_SSD"
-				disk_size: 50
-			}
-		}
+	let TN = "tke_" + N
+
+	resource: tencentcloud_key_pair: (TN): {
+		// │ Error: key_name only support letters, numbers and "_": tke-avinf
+		key_name: regexp.ReplaceAll("[^a-zA-Z0-9_]", TN, "_")
 	}
 
-	for n, np in #var.kubernetes.node_pool {
-		resource: tencentcloud_kubernetes_node_pool: ("\(N)_\(n)"): np & {
+	for n, np in #tencentcloud.kubernetes.node_pool {
+		resource: tencentcloud_kubernetes_node_pool: ("\(N)_\(n)"): np.args & {
 			name:       n
 			cluster_id: _local.cluster_id
 			vpc_id:     "${local.vpc_id}"
-			subnet_ids: ["${local.subnet_id}"]
-			min_size: 0
-			max_size: 3
+			subnet_ids: [...string]
+			min_size:             *0 | _
+			max_size:             *3 | _
+			delete_keep_instance: *false | true
 			auto_scaling_config: {
 				instance_type: *"SA3.MEDIUM2" | _
 				key_ids: ["${tencentcloud_key_pair.\(TN).id}"]
 				orderly_security_group_ids: ["${tencentcloud_security_group.\(TN).id}"]
 			}
 		}
-	}
-
-	resource: tencentcloud_key_pair: (TN): {
-		// │ Error: key_name only support letters, numbers and "_": tke-avinf
-		key_name: regexp.ReplaceAll("[^a-zA-Z0-9_]", TN, "_")
 	}
 
 	data: tencentcloud_vpc_instances: vpc: {
@@ -122,11 +111,15 @@ kubernetes: {
 		}]
 	}
 
-	let NE = N + "-extranet"
-	let TNE = "tke-" + NE
+	let TNE = "tke_\(N)_extranet"
 
-	resource: tencentcloud_kubernetes_cluster_endpoint: (NE): {
-		cluster_id:                      _local.cluster_id
+	resource: tencentcloud_kubernetes_cluster_endpoint: (N): #tencentcloud.kubernetes.cluster_endpoint.args & {
+		cluster_id: _local.cluster_id
+
+		cluster_intranet:           true
+		cluster_intranet_domain?:   _
+		cluster_intranet_subnet_id: *"${local.subnet_id}" | _
+
 		cluster_internet:                true
 		cluster_internet_security_group: "${tencentcloud_security_group.\(TNE).id}"
 	}
@@ -138,16 +131,12 @@ kubernetes: {
 	// https://cloud.tencent.com/document/product/457/9084
 	resource: tencentcloud_security_group_rule_set: (TNE): {
 		security_group_id: "${tencentcloud_security_group.\(TNE).id}"
-		ingress: []
+		ingress: [...]
 		egress: [{
 			action:     "ACCEPT"
 			cidr_block: "0.0.0.0/0"
 			port:       "ALL"
 			protocol:   "ALL"
 		}]
-	}
-
-	data: tencentcloud_kubernetes_cluster_authentication_options: (N): {
-		cluster_id: _local.cluster_id
 	}
 }

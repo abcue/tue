@@ -7,8 +7,8 @@ import (
 )
 
 with: rsc_id: {
-	#var: {
-		args: {
+	#tencentcloud: {
+		vpc: reqs: {
 			subnet_name: string
 			vpc_name:    string
 		}
@@ -19,7 +19,7 @@ with: rsc_id: {
 	}
 
 	data: tencentcloud_private_dns_records: rsc_id: {
-		zone_id: "${local.zone_id}"
+		zone_id: "${local.rsc_id_zone_id}"
 	}
 
 	data: tencentcloud_private_dns_private_zone_list: rsc_id: {
@@ -33,13 +33,13 @@ with: rsc_id: {
 
 	locals: {
 		rsc_id:         "${{ for r in data.tencentcloud_private_dns_records.rsc_id.record_set : r.sub_domain => r.record_value }}"
-		rsc_id_domain:  "id.\(#var.private_dns.domain)"
+		rsc_id_domain:  "id.\(#tencentcloud.private_dns.domain)"
 		rsc_id_zones:   "${{ for z in data.tencentcloud_private_dns_private_zone_list.rsc_id.private_zone_set : z.domain => z }}"
 		rsc_id_zone_id: "${local.rsc_id_zones[local.rsc_id_domain].zone_id}"
 
 		app_id:    "${data.tencentcloud_user_info.current.app_id}"
-		vpc_id:    "${local.rsc_id[\"\(strings.ToLower(#var.args.vpc_name)).vpc\"]}"
-		subnet_id: "${local.rsc_id[\"\(strings.ToLower(#var.args.subnet_name)).subnet\"]}"
+		vpc_id:    *"${local.rsc_id[\"\(strings.ToLower(#tencentcloud.vpc.reqs.vpc_name)).vpc\"]}" | _
+		subnet_id: *"${local.rsc_id[\"\(strings.ToLower(#tencentcloud.vpc.reqs.subnet_name)).subnet\"]}" | _
 	}
 
 	// // Uncomment to debug

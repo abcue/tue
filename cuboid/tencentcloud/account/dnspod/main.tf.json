@@ -10,7 +10,7 @@
     },
     "tencentcloud_private_dns_records": {
       "rsc_id": {
-        "zone_id": "${local.zone_id}"
+        "zone_id": "${local.rsc_id_zone_id}"
       }
     },
     "tencentcloud_user_info": {
@@ -50,6 +50,13 @@
       },
       "subdomain3_dnspod_domain": {
         "domain": "subdomain3.dnspod.domain"
+      }
+    }
+  },
+  "terraform": {
+    "required_providers": {
+      "tencentcloud": {
+        "source": "tencentcloudstack/tencentcloud"
       }
     }
   }
