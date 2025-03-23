@@ -8,13 +8,10 @@ import (
 
 with: rsc_id: {
 	#tencentcloud: {
+		private_dns: reqs: domain: string
 		vpc: reqs: {
 			subnet_name: string
 			vpc_name:    string
-		}
-		private_dns: {
-			domain: string
-			sub_domains: [...string]
 		}
 	}
 
@@ -33,7 +30,7 @@ with: rsc_id: {
 
 	locals: {
 		rsc_id:         "${{ for r in data.tencentcloud_private_dns_records.rsc_id.record_set : r.sub_domain => r.record_value }}"
-		rsc_id_domain:  "id.\(#tencentcloud.private_dns.domain)"
+		rsc_id_domain:  "id.\(#tencentcloud.private_dns.reqs.domain)"
 		rsc_id_zones:   "${{ for z in data.tencentcloud_private_dns_private_zone_list.rsc_id.private_zone_set : z.domain => z }}"
 		rsc_id_zone_id: "${local.rsc_id_zones[local.rsc_id_domain].zone_id}"
 
@@ -41,89 +38,73 @@ with: rsc_id: {
 		vpc_id:    *"${local.rsc_id[\"\(strings.ToLower(#tencentcloud.vpc.reqs.vpc_name)).vpc\"]}" | _
 		subnet_id: *"${local.rsc_id[\"\(strings.ToLower(#tencentcloud.vpc.reqs.subnet_name)).subnet\"]}" | _
 	}
-
-	// // Uncomment to debug
-	// output: {
-	// 	rsc_id: value: "${local.rsc_id}"
-	// }
 }
 
 private_dns: {
-	#var: {
-		private_dns: {
-			domain: *"" | string
+	#var: name: string
+
+	let N = #var.name
+
+	#tencentcloud: {
+		provider: args: region: string
+		private_dns: reqs: {
+			domain: *N | string
 			sub_domains: *[] | [...string]
-			// a creates a record resolving to IPv4 addresses
-			// a: [record]: =ipv4 | [...ipv4]
-			a: *{} | {[string]: string | [...string]}
-			cname: {
-				[record_value=string]: [sub_domain=string]: _
-			}
-			srv: *{} | {[string]: string}
+			records: [type=string]: [sub_domain=string]: string | [...string]
 		}
 	}
 
-	resource?: tencentcloud_private_dns_zone?: [_]: {
+	let D = #tencentcloud.private_dns.reqs.domain
+
+	resource?: tencentcloud_private_dns_zone: [_]: {
 		dns_forward_status: "DISABLED"
 		vpc_set: {
-			region:      #var.region
+			region:      #tencentcloud.provider.args.region
 			uniq_vpc_id: "${local.vpc_id}"
 		}
 		cname_speedup_status: "DISABLED"
 	}
 
-	data?: tencentcloud_private_dns_private_zone_list?: this: {
-		filters: {
-			name: "Domain"
-			values: [#var.domain]
+	let RN = strings.Replace(N, ".", "_", -1)
+	resource?: tencentcloud_private_dns_zone?: (RN)?: {
+		domain: N
+	}
+
+	if resource.tencentcloud_private_dns_zone[RN] == _|_ {
+		data: tencentcloud_private_dns_private_zone_list: this: {
+			filters: {
+				name: "Domain"
+				values: [N]
+			}
 		}
+		locals: domain_zone_id: "${{for zone in data.tencentcloud_private_dns_private_zone_list.this.private_zone_set : zone.domain => zone.zone_id}}"
 	}
 
-	locals: domain_zone_id: "${{for zone in data.tencentcloud_private_dns_private_zone_list.this.private_zone_set : zone.domain => zone.zone_id}}"
-
-	_local: {
-		domain_zone_id: #"${local.domain_zone_id["\#(#var.private_dns.domain)"]}"#
-		dns_replace:    "[^0-9a-zA-Z_\\-]"
+	if resource.tencentcloud_private_dns_zone[RN] != _|_ {
+		locals: domain_zone_id: "${tencentcloud_private_dns_zone.\(RN).id}"
 	}
 
-	for record, value in #var.private_dns.a for v in list.FlattenN([value], -1) {
-		resource: tencentcloud_private_dns_record: (regexp.ReplaceAllLiteral(_local.dns_replace, record+v, "_")): {
-			zone_id:      _local.domain_zone_id
-			sub_domain:   record
-			record_type:  "A"
-			record_value: v
-		}
-	}
-
-	for domain, records in #var.private_dns.cname for record, _ in records {
-		resource: tencentcloud_private_dns_record: (regexp.ReplaceAllLiteral(_local.dns_replace, record, "_")): {
-			zone_id:      _local.domain_zone_id
-			sub_domain:   record
-			record_type:  "CNAME"
-			record_value: domain
-		}
-	}
-
-	for record, value in #var.private_dns.srv for v in list.FlattenN([value], -1) {
-		resource: tencentcloud_private_dns_record: (regexp.ReplaceAllLiteral(_local.dns_replace, v+record, "_")): {
-			zone_id:      _local.domain_zone_id
-			sub_domain:   v
-			record_type:  "SRV"
-			record_value: record
-		}
-	}
-
-	for sd in #var.private_dns.sub_domains {
+	for sd in #tencentcloud.private_dns.reqs.sub_domains {
 		resource: tencentcloud_private_dns_zone: {
-			(sd): domain: "\(sd).\(#var.domain)"
+			(sd): domain: "\(sd).\(D)"
 		}
 		resource: tencentcloud_private_dns_record: {
 			(sd): {
-				zone_id:      "${local.zone_id}"
-				sub_domain:   "\(sd).\(#var.private_dns.domain).dns_zone"
+				zone_id:      "${local.rsc_id_zone_id}"
+				sub_domain:   "\(sd).\(D).dns_zone"
 				record_type:  "TXT"
 				record_value: "${tencentcloud_private_dns_zone.\(sd).id}"
 			}
+		}
+	}
+
+	for type, subdomains in #tencentcloud.private_dns.reqs.records for sd, value in subdomains for v in list.FlattenN([value], -1) {
+		let RN = regexp.ReplaceAll("[^0-9a-zA-Z_\\-]", strings.Join([type, sd, v], "_"), "_")
+		resource: tencentcloud_private_dns_record: (RN): {
+			zone_id:      "${local.domain_zone_id}"
+			sub_domain:   sd
+			record_type:  type
+			record_value: v
 		}
 	}
 }

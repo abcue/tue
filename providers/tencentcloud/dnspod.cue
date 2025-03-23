@@ -10,16 +10,11 @@ dnspod: {
 	#tencentcloud: dnspod: {
 		domain: string
 		sub_domains: *[] | [...string]
-		// a creates a record resolving to IPv4 addresses
-		// a: [record]: =ipv4 | [...ipv4]
-		// e.g.
-		// a: {
-		// 	subdomain1: "100.65.0.4"
-		// 	subdomain2: ["100.65.0.2", "100.65.0.3"]
-		// }
 		record: {
-			a: *{} | {[string]: string | [...string]}
-			cname: [record_value=string]: [sub_domain=string]: _
+			// a creates a record resolving to IPv4 addresses
+			// a: [record]: =ipv4 | [...ipv4]
+			a: *{} | {[sub_domain=string]: string | [...string]}
+			cname: *{} | {[value=string]: [sub_domain=string]: _}
 			srv: *{} | {[string]: string}
 		}
 	}

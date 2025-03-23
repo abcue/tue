@@ -15,6 +15,7 @@ kubernetes: {
 	}
 
 	#tencentcloud: kubernetes: {
+		ingress: reqs: ipm: [...string]
 		cluster: args: {...}
 		node_pool: [NAME=_]: args: {...}
 		cluster_endpoint: args: {...}
@@ -79,11 +80,6 @@ kubernetes: {
 		security_group_id: "${tencentcloud_security_group.\(TN).id}"
 		ingress: [{
 			action:     "ACCEPT"
-			cidr_block: "${data.tencentcloud_vpc_instances.vpc.instance_list[0].cidr_block}"
-			port:       "ALL"
-			protocol:   "ALL"
-		}, {
-			action:     "ACCEPT"
 			cidr_block: "${tencentcloud_kubernetes_cluster.\(N).cluster_cidr}"
 			port:       "ALL"
 			protocol:   "ALL"
@@ -102,6 +98,11 @@ kubernetes: {
 			cidr_block: "0.0.0.0/0"
 			port:       "ALL"
 			protocol:   "ICMP"
+		}, for ipm in #tencentcloud.kubernetes.ingress.reqs.ipm {
+			action:              "ACCEPT"
+			address_template_id: #"${local.rsc_id["\#(ipm).ipm"]}"#
+			port:                "ALL"
+			protocol:            "ALL"
 		}]
 		egress: [{
 			action:     "ACCEPT"
