@@ -1,0 +1,179 @@
+{
+  "data": {
+    "tencentcloud_kubernetes_cluster_authentication_options": {
+      "sandbox": {
+        "cluster_id": "${tencentcloud_kubernetes_cluster.sandbox.id}"
+      }
+    },
+    "tencentcloud_private_dns_private_zone_list": {
+      "rsc_id": {
+        "filters": {
+          "name": "Domain",
+          "values": "${[local.rsc_id_domain]}"
+        }
+      }
+    },
+    "tencentcloud_private_dns_records": {
+      "rsc_id": {
+        "zone_id": "${local.zone_id}"
+      }
+    },
+    "tencentcloud_user_info": {
+      "current": {}
+    },
+    "tencentcloud_vpc_instances": {
+      "vpc": {
+        "vpc_id": "${local.vpc_id}"
+      }
+    }
+  },
+  "locals": {
+    "app_id": "${data.tencentcloud_user_info.current.app_id}",
+    "rsc_id": "${{ for r in data.tencentcloud_private_dns_records.rsc_id.record_set : r.sub_domain => r.record_value }}",
+    "rsc_id_domain": "id.default.doma.in",
+    "rsc_id_zone_id": "${local.rsc_id_zones[local.rsc_id_domain].zone_id}",
+    "rsc_id_zones": "${{ for z in data.tencentcloud_private_dns_private_zone_list.rsc_id.private_zone_set : z.domain => z }}",
+    "subnet_id": "${local.rsc_id[\"default.subnet\"]}",
+    "vpc_id": "${local.rsc_id[\"default.vpc\"]}"
+  },
+  "resource": {
+    "tencentcloud_key_pair": {
+      "tke-sandbox": {
+        "key_name": "tke-sandbox"
+      }
+    },
+    "tencentcloud_kubernetes_cluster": {
+      "sandbox": {
+        "auth_options": {
+          "auto_create_discovery_anonymous_auth": true,
+          "use_tke_default": true
+        },
+        "cluster_cidr": "172.18.0.0/16",
+        "cluster_internet": true,
+        "cluster_name": "sandbox",
+        "cluster_version": "1.30.0",
+        "container_runtime": "containerd",
+        "vpc_id": "${local.vpc_id}"
+      }
+    },
+    "tencentcloud_kubernetes_cluster_endpoint": {
+      "sandbox-extranet": {
+        "cluster_id": "${local.cluster_id}",
+        "cluster_internet": true,
+        "cluster_internet_security_group": "${tencentcloud_security_group.sandbox-extranet.id}"
+      }
+    },
+    "tencentcloud_kubernetes_native_node_pool": {
+      "sandbox": {
+        "cluster_id": "${tencentcloud_kubernetes_cluster.sandbox.id}",
+        "name": "sandbox",
+        "native": {
+          "instance_charge_type": "POSTPAID_BY_HOUR",
+          "instance_types": [
+            "SA3.MEDIUM2"
+          ],
+          "key_ids": [
+            "${tencentcloud_key_pair.sandbox.id}"
+          ],
+          "security_group_ids": [
+            "${tencentcloud_security_group.sandbox.id}"
+          ],
+          "subnet_ids": [
+            "${local.subnet_id}"
+          ],
+          "system_disk": {
+            "disk_size": 50,
+            "disk_type": "CLOUD_SSD"
+          }
+        },
+        "type": "Native"
+      }
+    },
+    "tencentcloud_kubernetes_node_pool": {
+      "sandbox": {
+        "auto_scaling_config": {
+          "instance_type": "SA3.MEDIUM2",
+          "key_ids": [
+            "${tencentcloud_key_pair.sandbox.id}"
+          ],
+          "orderly_security_group_ids": [
+            "${tencentcloud_security_group.sandbox.id}"
+          ]
+        },
+        "cluster_id": "${tencentcloud_kubernetes_cluster.sandbox.id}",
+        "max_size": 3,
+        "min_size": 0,
+        "name": "sandbox",
+        "subnet_ids": [
+          "${local.subnet_id}"
+        ],
+        "vpc_id": "${local.vpc_id}"
+      }
+    },
+    "tencentcloud_security_group": {
+      "tke-sandbox": {
+        "name": "tke-sandbox"
+      },
+      "tke-sandbox-extranet": {
+        "name": "tke-sandbox-extranet"
+      }
+    },
+    "tencentcloud_security_group_rule_set": {
+      "tke-sandbox": {
+        "egress": [
+          {
+            "action": "ACCEPT",
+            "cidr_block": "0.0.0.0/0",
+            "port": "ALL",
+            "protocol": "ALL"
+          }
+        ],
+        "ingress": [
+          {
+            "action": "ACCEPT",
+            "cidr_block": "${data.tencentcloud_vpc_instances.vpc.instance_list[0].cidr_block}",
+            "port": "ALL",
+            "protocol": "ALL"
+          },
+          {
+            "action": "ACCEPT",
+            "cidr_block": "${tencentcloud_kubernetes_cluster.sandbox.cluster_cidr}",
+            "port": "ALL",
+            "protocol": "ALL"
+          },
+          {
+            "action": "ACCEPT",
+            "cidr_block": "0.0.0.0/0",
+            "port": "30000-32768",
+            "protocol": "TCP"
+          },
+          {
+            "action": "ACCEPT",
+            "cidr_block": "0.0.0.0/0",
+            "port": "30000-32768",
+            "protocol": "UDP"
+          },
+          {
+            "action": "ACCEPT",
+            "cidr_block": "0.0.0.0/0",
+            "port": "ALL",
+            "protocol": "ICMP"
+          }
+        ],
+        "security_group_id": "${tencentcloud_security_group.tke-sandbox.id}"
+      },
+      "tke-sandbox-extranet": {
+        "egress": [
+          {
+            "action": "ACCEPT",
+            "cidr_block": "0.0.0.0/0",
+            "port": "ALL",
+            "protocol": "ALL"
+          }
+        ],
+        "ingress": [],
+        "security_group_id": "${tencentcloud_security_group.tke-sandbox-extranet.id}"
+      }
+    }
+  }
+}

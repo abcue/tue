@@ -1,0 +1,79 @@
+{
+  "data": {
+    "tencentcloud_private_dns_private_zone_list": {
+      "rsc_id": {
+        "filters": {
+          "name": "Domain",
+          "values": "${[local.rsc_id_domain]}"
+        }
+      }
+    },
+    "tencentcloud_private_dns_records": {
+      "rsc_id": {
+        "zone_id": "${local.zone_id}"
+      }
+    },
+    "tencentcloud_user_info": {
+      "current": {}
+    }
+  },
+  "locals": {
+    "app_id": "${data.tencentcloud_user_info.current.app_id}",
+    "host": "${resource.tencentcloud_private_dns_record.sandbox.sub_domain}.pg.default.doma.in",
+    "rsc_id": "${{ for r in data.tencentcloud_private_dns_records.rsc_id.record_set : r.sub_domain => r.record_value }}",
+    "rsc_id_domain": "id.default.doma.in",
+    "rsc_id_zone_id": "${local.rsc_id_zones[local.rsc_id_domain].zone_id}",
+    "rsc_id_zones": "${{ for z in data.tencentcloud_private_dns_private_zone_list.rsc_id.private_zone_set : z.domain => z }}",
+    "subnet_id": "${local.rsc_id[\"default.subnet\"]}",
+    "vpc_id": "${local.rsc_id[\"default.vpc\"]}"
+  },
+  "output": {
+    "conn": {
+      "value": "postgresql://root@${local.host}"
+    },
+    "psql": {
+      "value": "psql --host ${local.host} --username root --dbname postgres"
+    },
+    "root_password": {
+      "sensitive": true,
+      "value": "${tencentcloud_postgresql_instance.sandbox.root_password}"
+    }
+  },
+  "resource": {
+    "random_password": {
+      "sandbox": {
+        "length": 16,
+        "min_lower": 1,
+        "min_numeric": 1,
+        "min_special": 1,
+        "min_upper": 1,
+        "override_special": "/"
+      }
+    },
+    "tencentcloud_postgresql_instance": {
+      "sandbox": {
+        "auto_renew_flag": 1,
+        "availability_zone": "ap-guangzhou-1",
+        "charge_type": "PREPAID",
+        "db_major_version": "17",
+        "delete_protection": true,
+        "memory": 2,
+        "name": "sandbox",
+        "root_password": "${random_password.sandbox.result}",
+        "root_user": "root",
+        "storage": 20,
+        "subnet_id": "${local.subnet_id}",
+        "vpc_id": "${local.vpc_id}"
+      }
+    },
+    "tencentcloud_private_dns_record": {
+      "sandbox": {
+        "record_type": "A",
+        "record_value": "${tencentcloud_postgresql_instance.sandbox.private_access_ip}",
+        "sub_domain": "sandbox",
+        "ttl": 300,
+        "zone_id": "${local.rsc_id[\"pg.default.doma.in.dns_zone\"]}"
+      }
+    }
+  }
+}
